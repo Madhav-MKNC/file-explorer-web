@@ -15,6 +15,31 @@ Open **http://127.0.0.1:50006**. Stop the server with `Ctrl+C`.
 
 The server binds only to the local machine. It does not require a login and must not be exposed to a network or placed behind a public proxy. The browser session, request token, same-origin checks, and trusted-host checks protect local file operations from other websites. The Flask debugger is disabled.
 
+## Background start and stop
+
+After cloning on the target Windows machine, run setup once in PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\file-explorer-setup.ps1
+```
+
+Setup installs the Python dependencies, adds this repository to the current user's PATH, and sets that user's PowerShell execution policy to `RemoteSigned`. It does not start the app. Reconnect SSH or open a new PowerShell session after setup.
+
+```powershell
+file-explorer-run
+file-explorer-stop
+```
+
+Start uses Windows WMI to create a hidden process outside the terminal's process tree. It stays running after closing the terminal or disconnecting SSH. Stop targets only the recorded process and checks its creation time to avoid stopping a reused PID. Logs are in `.file-explorer.log`. There is no automatic start after a reboot. Keep the clone in its setup location and use the same Windows account for both commands.
+
+The app remains localhost-only. From another device, use an SSH tunnel rather than exposing the server:
+
+```sh
+ssh -L 50006:127.0.0.1:50006 user@windows-host
+```
+
+Open `http://127.0.0.1:50006` on that device while the tunnel is connected. Disconnecting the tunnel does not stop the server.
+
 ## Access rules
 
 - Every mounted drive is browsable, subject to the current Windows account's permissions.
