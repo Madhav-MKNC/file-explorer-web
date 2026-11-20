@@ -1,3 +1,4 @@
+
 # Windows File Explorer Web
 
 A local, offline-capable Flask interface for browsing and managing Windows files. The UI uses a Windows Explorer-style command bar, navigation pane, breadcrumbs, details view, and icon view.
@@ -23,7 +24,7 @@ After cloning on the target Windows machine, run setup once in PowerShell:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\file-explorer-setup.ps1
 ```
 
-Setup installs the Python dependencies, adds this repository to the current user's PATH, and sets that user's PowerShell execution policy to `RemoteSigned`. It does not start the app. Reconnect SSH or open a new PowerShell session after setup.
+Setup installs the Python dependencies and adds this repository to the current user's PATH. It does not start the app. It does not modify the PowerShell execution policy. Reconnect SSH or open a new PowerShell session after setup.
 
 ```powershell
 file-explorer-run
