@@ -6,6 +6,7 @@ import codecs
 import ctypes
 import fnmatch
 import hmac
+import ipaddress
 import locale
 import mimetypes
 import ntpath
@@ -27,7 +28,25 @@ from werkzeug.exceptions import HTTPException
 import recycle_bin
 
 
-PORT = 50006
+CONFIGS_ROOT = Path(__file__).resolve().parent / "configs"
+try:
+    HOST = (CONFIGS_ROOT / ".host").read_text(encoding="utf-8-sig").strip().lower()
+    port_text = (CONFIGS_ROOT / ".port").read_text(encoding="utf-8-sig").strip()
+except (OSError, UnicodeError) as error:
+    raise SystemExit(f"Could not read configs/.host or configs/.port: {error}") from None
+
+if HOST != "localhost":
+    try:
+        host_address = ipaddress.ip_address(HOST)
+    except ValueError:
+        raise SystemExit("configs/.host must contain localhost or a loopback IP address.") from None
+    if not host_address.is_loopback:
+        raise SystemExit("configs/.host must contain localhost or a loopback IP address.")
+    HOST = str(host_address)
+
+if not re.fullmatch(r"[0-9]{1,5}", port_text) or not 1 <= int(port_text) <= 65535:
+    raise SystemExit("configs/.port must contain a port number from 1 to 65535.")
+PORT = int(port_text)
 USERS_ROOT = Path("C:/Users")
 TEXT_LIMIT = 2 * 1024 * 1024
 SEARCH_LIMIT = 2000
@@ -42,8 +61,8 @@ TEXT_ENCODINGS.add(locale.getpreferredencoding(False))
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=secrets.token_bytes(32),
-    TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]"],
-    SESSION_COOKIE_NAME="file_explorer_50006",
+    TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]", f"[{HOST}]" if ":" in HOST else HOST],
+    SESSION_COOKIE_NAME=f"file_explorer_{PORT}",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
     MAX_FORM_PARTS=20_000,
@@ -869,4 +888,4 @@ def download():
 if __name__ == "__main__":
     if os.name != "nt":
         raise SystemExit("This application requires Windows.")
-    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
+    app.run(host=HOST, port=PORT, debug=False, threaded=True)

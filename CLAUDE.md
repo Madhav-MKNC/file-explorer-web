@@ -11,9 +11,9 @@ py -m pip install -r requirements.txt
 py app.py
 ```
 
-For background operation, run `file-explorer-setup.ps1` once on the target machine, then use `file-explorer-run` and `file-explorer-stop` from PowerShell. Setup installs dependencies and adds this clone to user PATH. It does not modify the PowerShell execution policy. The run script starts a detached WMI process; the stop script validates its recorded PID and creation time. Neither script changes the loopback binding. Logs and process state are ignored by Git.
+For background operation, run `file-explorer-setup.ps1` once on the target machine, then use `file-explorer-run` and `file-explorer-stop` from PowerShell. Setup installs dependencies and adds this clone to user PATH. It does not modify the PowerShell execution policy. The run script starts a detached WMI process using `configs/.host` and `configs/.port`; the stop script validates its recorded PID and creation time. The host must be `localhost` or a loopback IP address, and the port must be an integer from 1 to 65535. Each config file contains one plain value without quotes. Restart the server after changing them. Logs and process state are ignored by Git.
 
-Use the system Python installation, not a virtual environment. The app runs at `http://127.0.0.1:50006` with the debugger disabled. There is no frontend build step, configured linter, test suite, or single-test command. Do not add or run tests unless requested.
+Use the system Python installation, not a virtual environment. The app defaults to `http://localhost:50006` using the two files in `configs`, with the debugger disabled. There is no frontend build step, configured linter, test suite, or single-test command. Do not add or run tests unless requested.
 
 ## Architecture
 

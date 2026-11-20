@@ -3,18 +3,42 @@ $ErrorActionPreference = 'Stop'
 $appPath = Join-Path $PSScriptRoot 'app.py'
 $statePath = Join-Path $PSScriptRoot '.file-explorer-process.json'
 $logPath = Join-Path $PSScriptRoot '.file-explorer.log'
+$configsPath = Join-Path $PSScriptRoot 'configs'
+$serverHost = ([string](Get-Content -LiteralPath (Join-Path $configsPath '.host') -Raw -Encoding UTF8)).Trim().ToLowerInvariant()
+$portText = ([string](Get-Content -LiteralPath (Join-Path $configsPath '.port') -Raw -Encoding UTF8)).Trim()
+
+if ($serverHost -ne 'localhost') {
+    $address = $null
+    if (-not [System.Net.IPAddress]::TryParse($serverHost, [ref]$address) -or
+        -not [System.Net.IPAddress]::IsLoopback($address)) {
+        throw 'configs/.host must contain localhost or a loopback IP address.'
+    }
+    $serverHost = $address.ToString()
+}
+[int]$port = 0
+if ($portText -notmatch '\A[0-9]{1,5}\z' -or -not [int]::TryParse($portText, [ref]$port) -or
+    $port -lt 1 -or $port -gt 65535) {
+    throw 'configs/.port must contain a port number from 1 to 65535.'
+}
+$urlHost = $serverHost
+if ($urlHost.Contains(':')) { $urlHost = "[$urlHost]" }
+$serverUrl = 'http://{0}:{1}' -f $urlHost, $port
 
 if (Test-Path -LiteralPath $statePath) {
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
     $process = Get-CimInstance Win32_Process -Filter "ProcessId=$([int]$state.Id)"
     if ($process -and $process.CreationDate.ToFileTimeUtc().ToString() -eq $state.Started) {
-        Write-Output "Already running at http://127.0.0.1:50006 (PID $($state.Id))."
+        if ($state.Url) {
+            Write-Output "Already running at $($state.Url) (PID $($state.Id))."
+        } else {
+            Write-Output "Already running (PID $($state.Id))."
+        }
         return
     }
 }
 
-if (Get-NetTCPConnection -LocalPort 50006 -State Listen -ErrorAction SilentlyContinue) {
-    throw 'Port 50006 is already in use. Stop the existing server before running this script.'
+if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+    throw "Port $port is already in use. Stop the existing server before running this script."
 }
 
 $python = & py -3 -c 'import sys; print(sys.executable)'
@@ -36,13 +60,13 @@ if ($result.ReturnValue -ne 0) { throw "Could not start the server. Windows erro
 
 $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($result.ProcessId)"
 if (-not $process) { throw "Server exited. Read $logPath for the error." }
-@{ Id = $result.ProcessId; Started = $process.CreationDate.ToFileTimeUtc().ToString() } |
+@{ Id = $result.ProcessId; Started = $process.CreationDate.ToFileTimeUtc().ToString(); Url = $serverUrl } |
     ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 
 for ($attempt = 0; $attempt -lt 20; $attempt++) {
-    $listener = Get-NetTCPConnection -LocalPort 50006 -State Listen -ErrorAction SilentlyContinue
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     if ($listener | Where-Object { $_.OwningProcess -eq $result.ProcessId }) {
-        Write-Output "Running at http://127.0.0.1:50006 (PID $($result.ProcessId))."
+        Write-Output "Running at $serverUrl (PID $($result.ProcessId))."
         return
     }
     if (-not (Get-Process -Id $result.ProcessId -ErrorAction SilentlyContinue)) {

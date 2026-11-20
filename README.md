@@ -12,9 +12,16 @@ py -m pip install -r requirements.txt
 py app.py
 ```
 
-Open **http://127.0.0.1:50006**. Stop the server with `Ctrl+C`.
+Open **http://localhost:50006** by default. Stop the server with `Ctrl+C`.
 
-The server binds only to the local machine. It does not require a login and must not be exposed to a network or placed behind a public proxy. The browser session, request token, same-origin checks, and trusted-host checks protect local file operations from other websites. The Flask debugger is disabled.
+The `configs` folder contains only two files:
+
+- `.host`: the bind address, default `localhost`. Use `localhost` or a loopback IP address such as `127.0.0.1` or `::1`.
+- `.port`: the port number, default `50006`. Use an integer from `1` to `65535`.
+
+Each file contains one plain value without quotes. Both `py app.py` and `file-explorer-run` read these files. Restart the server after changing them. Open `http://<host>:<port>` using the configured values; IPv6 addresses need brackets, for example `http://[::1]:50006`.
+
+The server rejects non-loopback bind addresses and binds only to the local machine. It does not require a login and must not be exposed to a network or placed behind a public proxy. The browser session, request token, same-origin checks, and trusted-host checks protect local file operations from other websites. The Flask debugger is disabled.
 
 ## Background start and stop
 
