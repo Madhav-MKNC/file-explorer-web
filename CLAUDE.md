@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Requires Windows and Python 3.12+ (`Path.is_junction()` is used). From the repository root in PowerShell:
 
 ```powershell
-py -m pip install -r requirements.txt
-py app.py
+python -m pip install -r requirements.txt
+python app.py
 ```
 
 For background operation, run `file-explorer-setup.ps1` once on the target machine, then use `file-explorer-run` and `file-explorer-stop` from PowerShell. Setup installs dependencies and adds this clone to user PATH. It does not modify the PowerShell execution policy. The run script starts a detached WMI process using `configs/.host` and `configs/.port`; the stop script validates its recorded PID and creation time. The host must be `localhost` or a loopback IP address, and the port must be an integer from 1 to 65535. Each config file contains one plain value without quotes. Restart the server after changing them. Logs and process state are ignored by Git.

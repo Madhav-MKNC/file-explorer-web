@@ -41,7 +41,7 @@ if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyCon
     throw "Port $port is already in use. Stop the existing server before running this script."
 }
 
-$python = & py -3 -c 'import sys; print(sys.executable)'
+$python = & python -c 'import sys; print(sys.executable)'
 if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer, then run file-explorer-setup.ps1.' }
 $python = $python.Trim()
 $pythonw = Join-Path (Split-Path -Parent $python) 'pythonw.exe'
