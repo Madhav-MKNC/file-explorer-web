@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import stat
 import sys
 import tempfile
@@ -78,8 +79,8 @@ def _read_access_key() -> str:
 
 try:
     CONFIGS_ROOT.mkdir(parents=True, exist_ok=True)
-    HOST = _read_setting(".host", "localhost").lower()
-    port_text = _read_setting(".port", "5000")
+    HOST = _read_setting(".host", "0.0.0.0").lower()
+    port_text = _read_setting(".port", "50006")
 except (OSError, UnicodeError) as error:
     raise SystemExit(f"Could not initialize configs/.host or configs/.port: {error}") from None
 
@@ -87,9 +88,9 @@ if HOST != "localhost":
     try:
         host_address = ipaddress.ip_address(HOST)
     except ValueError:
-        raise SystemExit("configs/.host must contain localhost or a loopback IP address.") from None
-    if not host_address.is_loopback:
-        raise SystemExit("configs/.host must contain localhost or a loopback IP address.")
+        raise SystemExit("configs/.host must contain localhost, 0.0.0.0, or a loopback IP address.") from None
+    if not host_address.is_loopback and HOST != "0.0.0.0":
+        raise SystemExit("configs/.host must contain localhost, 0.0.0.0, or a loopback IP address.")
     HOST = str(host_address)
 
 if not re.fullmatch(r"[0-9]{1,5}", port_text) or not 1 <= int(port_text) <= 65535:
@@ -114,10 +115,19 @@ DEVICE_NAME = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.
 TEXT_ENCODINGS = {"utf-8", "utf-8-sig", "utf-16", "utf-32", "cp1252", "latin-1"}
 TEXT_ENCODINGS.add(locale.getpreferredencoding(False))
 
+trusted_hosts = ["localhost", "127.0.0.1", "[::1]", f"[{HOST}]" if ":" in HOST else HOST]
+if HOST == "0.0.0.0":
+    machine_name = socket.gethostname()
+    trusted_hosts.append(machine_name)
+    try:
+        trusted_hosts.extend(address[4][0] for address in socket.getaddrinfo(machine_name, None, socket.AF_INET))
+    except OSError:
+        pass
+
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=secrets.token_bytes(32),
-    TRUSTED_HOSTS=["localhost", "127.0.0.1", "[::1]", f"[{HOST}]" if ":" in HOST else HOST],
+    TRUSTED_HOSTS=trusted_hosts,
     SESSION_COOKIE_NAME=f"file_explorer_{PORT}",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",

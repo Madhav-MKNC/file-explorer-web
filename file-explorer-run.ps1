@@ -18,8 +18,8 @@ $portText = ([string](Get-Content -LiteralPath (Join-Path $configsPath '.port') 
 if ($serverHost -ne 'localhost') {
     $address = $null
     if (-not [System.Net.IPAddress]::TryParse($serverHost, [ref]$address) -or
-        -not [System.Net.IPAddress]::IsLoopback($address)) {
-        throw 'configs/.host must contain localhost or a loopback IP address.'
+        (-not [System.Net.IPAddress]::IsLoopback($address) -and $serverHost -ne '0.0.0.0')) {
+        throw 'configs/.host must contain localhost, 0.0.0.0, or a loopback IP address.'
     }
     $serverHost = $address.ToString()
 }
@@ -29,6 +29,7 @@ if ($portText -notmatch '\A[0-9]{1,5}\z' -or -not [int]::TryParse($portText, [re
     throw 'configs/.port must contain a port number from 1 to 65535.'
 }
 $urlHost = $serverHost
+if ($urlHost -eq '0.0.0.0') { $urlHost = 'localhost' }
 if ($urlHost.Contains(':')) { $urlHost = "[$urlHost]" }
 $serverUrl = 'http://{0}:{1}' -f $urlHost, $port
 
