@@ -5,6 +5,8 @@ from __future__ import annotations
 import codecs
 import ctypes
 import fnmatch
+import getpass
+import hashlib
 import hmac
 import ipaddress
 import locale
@@ -15,6 +17,7 @@ import re
 import secrets
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -22,18 +25,63 @@ import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, render_template, request, send_file, session
+from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.exceptions import HTTPException
 
 import recycle_bin
 
 
 CONFIGS_ROOT = Path(__file__).resolve().parent / "configs"
+
+
+def _read_setting(name: str, default: str) -> str:
+    path = CONFIGS_ROOT / name
+    try:
+        with path.open("x", encoding="utf-8") as file:
+            file.write(default + "\n")
+    except FileExistsError:
+        pass
+    return path.read_text(encoding="utf-8-sig").strip()
+
+
+def _normalize_key(value: str) -> str:
+    value = value.strip()
+    if not value or "/" in value or len(value.splitlines()) != 1:
+        raise ValueError("The key must be a non-empty single line without /.")
+    return value
+
+
+def _read_access_key() -> str:
+    path = CONFIGS_ROOT / ".key"
+    if not path.exists():
+        if sys.stdin is None or not sys.stdin.isatty():
+            raise SystemExit("configs/.key is missing. Run python app.py --init-config in an interactive terminal to create it.")
+        while True:
+            try:
+                key = _normalize_key(getpass.getpass("Create access key (no /): "))
+            except ValueError as error:
+                print(error, file=sys.stderr)
+                continue
+            except (EOFError, KeyboardInterrupt):
+                raise SystemExit("Key creation cancelled.") from None
+            try:
+                with path.open("x", encoding="utf-8") as file:
+                    file.write(key + "\n")
+            except FileExistsError:
+                pass
+            break
+    try:
+        return _normalize_key(path.read_text(encoding="utf-8-sig"))
+    except ValueError:
+        raise SystemExit("configs/.key must contain a non-empty single line without /.") from None
+
+
 try:
-    HOST = (CONFIGS_ROOT / ".host").read_text(encoding="utf-8-sig").strip().lower()
-    port_text = (CONFIGS_ROOT / ".port").read_text(encoding="utf-8-sig").strip()
+    CONFIGS_ROOT.mkdir(parents=True, exist_ok=True)
+    HOST = _read_setting(".host", "localhost").lower()
+    port_text = _read_setting(".port", "5000")
 except (OSError, UnicodeError) as error:
-    raise SystemExit(f"Could not read configs/.host or configs/.port: {error}") from None
+    raise SystemExit(f"Could not initialize configs/.host or configs/.port: {error}") from None
 
 if HOST != "localhost":
     try:
@@ -47,12 +95,20 @@ if HOST != "localhost":
 if not re.fullmatch(r"[0-9]{1,5}", port_text) or not 1 <= int(port_text) <= 65535:
     raise SystemExit("configs/.port must contain a port number from 1 to 65535.")
 PORT = int(port_text)
+try:
+    ACCESS_KEY_HASH = hashlib.sha256(_read_access_key().encode("utf-8")).digest()
+except (OSError, UnicodeError):
+    raise SystemExit("Could not read or create configs/.key. Check its encoding and file permissions.") from None
 USERS_ROOT = Path("C:/Users")
 TEXT_LIMIT = 2 * 1024 * 1024
 SEARCH_LIMIT = 2000
 SEARCH_SCAN_LIMIT = 100_000
 SEARCH_SECONDS = 10
 MUTATION_LOCK = threading.RLock()
+LOGIN_LOCK = threading.Lock()
+LOGIN_FAILURES = []
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_WINDOW_SECONDS = 60
 INVALID_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 DEVICE_NAME = re.compile(r"^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\.|$)", re.I)
 TEXT_ENCODINGS = {"utf-8", "utf-8-sig", "utf-16", "utf-32", "cp1252", "latin-1"}
@@ -334,10 +390,8 @@ def _copy(source: Path, destination: Path, ancestors: set[str] | None = None) ->
 
 @app.before_request
 def authorize():
-    if request.endpoint in {"index", "static"}:
+    if request.endpoint == "static" and request.view_args.get("filename") == "login.css":
         return None
-    if not session.get("csrf_token"):
-        raise ExplorerError("Open the explorer page first, then retry.", 401)
     origin = request.headers.get("Origin")
     if origin:
         parsed = urlsplit(origin)
@@ -345,11 +399,20 @@ def authorize():
             raise ExplorerError("Cross-origin requests are not allowed.", 403)
     if request.headers.get("Sec-Fetch-Site") == "cross-site":
         raise ExplorerError("Cross-site requests are not allowed.", 403)
-    if request.path.startswith("/api/") or request.method != "GET":
+    if request.endpoint == "login":
+        return None
+    if session.get("authenticated") is not True:
+        if request.path.startswith("/api/") or request.method not in {"GET", "HEAD"}:
+            raise ExplorerError("Sign in to access File Explorer.", 401, code="authentication_required")
+        return redirect(url_for("login"))
+    if not session.get("csrf_token"):
+        session.clear()
+        raise ExplorerError("The session expired. Sign in again.", 401, code="authentication_required")
+    if request.path.startswith("/api/") or request.method not in {"GET", "HEAD"}:
         token = request.headers.get("X-Explorer-Token")
-        if not token and request.endpoint == "download":
+        if not token and request.endpoint in {"download", "logout"}:
             token = request.form.get("csrf_token")
-        if not isinstance(token, str) or not hmac.compare_digest(token, session["csrf_token"]):
+        if not isinstance(token, str) or not hmac.compare_digest(token.encode("utf-8"), session["csrf_token"].encode("utf-8")):
             raise ExplorerError("The session expired. Refresh the page and retry.", 403)
     return None
 
@@ -357,7 +420,8 @@ def authorize():
 @app.after_request
 def security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    # Preserve Origin on same-origin form POSTs without leaking referrers to other sites.
+    response.headers["Referrer-Policy"] = "same-origin"
     response.headers["Cache-Control"] = "no-store"
     if request.endpoint == "preview_file":
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
@@ -388,10 +452,49 @@ def http_error(error):
     return jsonify(error=error.description), error.code
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if session.get("authenticated") is True:
+        return redirect(url_for("index"))
+    if "login_token" not in session:
+        session["login_token"] = secrets.token_urlsafe(32)
+    error, status = None, 200
+    if request.method == "POST":
+        request.max_content_length = 16 * 1024
+        if request.content_length is not None and request.content_length > request.max_content_length:
+            raise ExplorerError("The sign-in request is too large.", 413)
+        token = request.form.get("csrf_token", "")
+        if not hmac.compare_digest(token.encode("utf-8"), session["login_token"].encode("utf-8")):
+            error, status = "This sign-in page expired. Try again.", 403
+        else:
+            try:
+                key = _normalize_key(request.form.get("key", ""))
+            except ValueError:
+                key = ""
+            with LOGIN_LOCK:
+                now = time.monotonic()
+                LOGIN_FAILURES[:] = [attempt for attempt in LOGIN_FAILURES if now - attempt < LOGIN_WINDOW_SECONDS]
+                if len(LOGIN_FAILURES) >= LOGIN_ATTEMPT_LIMIT:
+                    error, status = "Too many attempts. Wait one minute and try again.", 429
+                elif not hmac.compare_digest(hashlib.sha256(key.encode("utf-8")).digest(), ACCESS_KEY_HASH):
+                    LOGIN_FAILURES.append(now)
+                    error, status = "Incorrect access key. Try again.", 401
+            if error is None:
+                session.clear()
+                session["authenticated"] = True
+                session["csrf_token"] = secrets.token_urlsafe(32)
+                return redirect(url_for("index"), code=303)
+    return render_template("login.html", csrf_token=session["login_token"], error=error), status
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"), code=303)
+
+
 @app.get("/")
 def index():
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_urlsafe(32)
     return render_template("index.html", csrf_token=session["csrf_token"])
 
 
@@ -888,4 +991,6 @@ def download():
 if __name__ == "__main__":
     if os.name != "nt":
         raise SystemExit("This application requires Windows.")
+    if sys.argv[1:] == ["--init-config"]:
+        raise SystemExit(0)
     app.run(host=HOST, port=PORT, debug=False, threaded=True)

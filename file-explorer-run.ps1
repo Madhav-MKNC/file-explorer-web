@@ -4,6 +4,14 @@ $appPath = Join-Path $PSScriptRoot 'app.py'
 $statePath = Join-Path $PSScriptRoot '.file-explorer-process.json'
 $logPath = Join-Path $PSScriptRoot '.file-explorer.log'
 $configsPath = Join-Path $PSScriptRoot 'configs'
+$python = & python -c 'import sys; print(sys.executable)'
+if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer, then run file-explorer-setup.ps1.' }
+$python = $python.Trim()
+
+# Initialize missing config files and prompt for the key before detaching.
+& $python $appPath --init-config
+if ($LASTEXITCODE -ne 0) { throw 'Configuration setup failed. Fix the error above before starting the server.' }
+
 $serverHost = ([string](Get-Content -LiteralPath (Join-Path $configsPath '.host') -Raw -Encoding UTF8)).Trim().ToLowerInvariant()
 $portText = ([string](Get-Content -LiteralPath (Join-Path $configsPath '.port') -Raw -Encoding UTF8)).Trim()
 
@@ -41,9 +49,6 @@ if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyCon
     throw "Port $port is already in use. Stop the existing server before running this script."
 }
 
-$python = & python -c 'import sys; print(sys.executable)'
-if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer, then run file-explorer-setup.ps1.' }
-$python = $python.Trim()
 $pythonw = Join-Path (Split-Path -Parent $python) 'pythonw.exe'
 if (Test-Path -LiteralPath $pythonw) { $python = $pythonw }
 

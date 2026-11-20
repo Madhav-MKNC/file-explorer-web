@@ -113,6 +113,9 @@
                 `The file service returned an invalid response (HTTP ${response.status}).`,
             );
         }
+        if (response.status === 401 && data.code === "authentication_required") {
+            window.location.replace("/login");
+        }
         if (!response.ok) {
             const error = new Error(
                 data.error || `Request failed (HTTP ${response.status}).`,

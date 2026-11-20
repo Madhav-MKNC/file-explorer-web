@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light" />
+        <title>Sign in | File Explorer</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}" />
+    </head>
+    <body>
+        <main class="login-window" aria-labelledby="login-title">
+            <header class="window-titlebar">
+                <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="#e6ac35" d="M2 6a2 2 0 0 1 2-2h6l2 3h8a2 2 0 0 1 2 2v10H2z" />
+                    <path fill="#f5ca65" d="M2 9h20l-2 11H4z" />
+                </svg>
+                <span>File Explorer</span>
+                <span class="local-label">Local</span>
+            </header>
+            <section class="login-content">
+                <div class="lock-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 48 48">
+                        <rect x="12" y="21" width="24" height="21" rx="4" />
+                        <path d="M17 21v-7a7 7 0 0 1 14 0v7M24 29v5" />
+                    </svg>
+                </div>
+                <h1 id="login-title">Welcome back</h1>
+                <p class="login-subtitle">Enter your access key to open File Explorer.</p>
+                <form method="post" action="{{ url_for('login') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <label for="access-key">Access key</label>
+                    <input
+                        id="access-key"
+                        class="key-input"
+                        name="key"
+                        type="password"
+                        autocomplete="current-password"
+                        placeholder="Enter access key"
+                        aria-describedby="key-hint{% if error %} login-error{% endif %}"
+                        {% if error %}aria-invalid="true"{% endif %}
+                        spellcheck="false"
+                        autocapitalize="none"
+                        autofocus
+                        required
+                    />
+                    <p id="key-hint" class="key-hint">Use the key you created on this machine.</p>
+                    {% if error %}
+                    <p id="login-error" class="login-error" role="alert">{{ error }}</p>
+                    {% endif %}
+                    <button class="sign-in" type="submit">Sign in</button>
+                </form>
+            </section>
+            <footer class="login-footer">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="5" y="10" width="14" height="11" rx="2" />
+                    <path d="M8 10V6a4 4 0 0 1 8 0v4" />
+                </svg>
+                <span>Key-protected access. Your files stay on this machine.</span>
+            </footer>
+        </main>
+    </body>
+</html>

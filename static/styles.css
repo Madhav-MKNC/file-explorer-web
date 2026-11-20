@@ -159,6 +159,22 @@ a {
     padding-bottom: 5px
 }
 
+.logout-form {
+    flex-shrink: 0;
+    align-self: center;
+    margin-bottom: 5px
+}
+
+.logout-form button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-color: #c8c8c8;
+    background: var(--chrome);
+    font-size: 12px
+}
+
 .local-label {
     border: 1px solid #c8c8c8;
     border-radius: 4px;
@@ -1261,11 +1277,22 @@ dialog::backdrop {
     }
 
     .titlebar {
-        padding-left: 10px
+        padding-left: 10px;
+        gap: 8px
     }
 
     .title-tab {
-        width: 200px
+        width: 200px;
+        flex: 1;
+        min-width: 0
+    }
+
+    .logout-form button {
+        padding: 5px 7px
+    }
+
+    .logout-form span {
+        display: none
     }
 
     .navigation {

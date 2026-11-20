@@ -3,3 +3,7 @@ __pycache__/
 .claude/settings.local.json
 .file-explorer-process.json
 .file-explorer.log
+
+configs/.host
+configs/.port
+configs/.key

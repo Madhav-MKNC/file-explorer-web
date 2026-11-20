@@ -161,6 +161,13 @@
                 <span class="app-name"
                     >File Explorer <span class="local-label">Local</span></span
                 >
+                <form class="logout-form" method="post" action="{{ url_for('logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+                    <button type="submit" title="Sign out" aria-label="Sign out">
+                        <svg class="icon small"><use href="#i-lock" /></svg>
+                        <span>Sign out</span>
+                    </button>
+                </form>
             </header>
             <nav class="commandbar" aria-label="File commands">
                 <button class="command" data-menu="new" title="Create an item">
