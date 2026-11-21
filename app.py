@@ -27,7 +27,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, SecurityError
 
 import recycle_bin
 
@@ -123,6 +123,18 @@ if HOST == "0.0.0.0":
         trusted_hosts.extend(address[4][0] for address in socket.getaddrinfo(machine_name, None, socket.AF_INET))
     except OSError:
         pass
+
+try:
+    extra_hosts = _read_setting(".trusted-hosts", "")
+except (OSError, UnicodeError):
+    raise SystemExit("Could not read or create configs/.trusted-hosts. Check its encoding and file permissions.") from None
+for extra_host in extra_hosts.splitlines():
+    extra_host = extra_host.strip().lower()
+    if not extra_host:
+        continue
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", extra_host) or ".." in extra_host:
+        raise SystemExit("configs/.trusted-hosts must contain one exact IPv4 address or hostname per line, without a scheme or port.")
+    trusted_hosts.append(extra_host)
 
 app = Flask(__name__)
 app.config.update(
@@ -400,6 +412,8 @@ def _copy(source: Path, destination: Path, ancestors: set[str] | None = None) ->
 
 @app.before_request
 def authorize():
+    if isinstance(request.routing_exception, SecurityError):
+        raise request.routing_exception
     if request.endpoint == "static" and request.view_args.get("filename") == "login.css":
         return None
     origin = request.headers.get("Origin")
@@ -459,6 +473,8 @@ def filesystem_error(error):
 
 @app.errorhandler(HTTPException)
 def http_error(error):
+    if isinstance(error, SecurityError):
+        return jsonify(error="This host is not allowed. Add its exact IP address or hostname to configs/.trusted-hosts and restart."), error.code
     return jsonify(error=error.description), error.code
 
 

@@ -50,9 +50,7 @@ if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyCon
     throw "Port $port is already in use. Stop the existing server before running this script."
 }
 
-$pythonw = Join-Path (Split-Path -Parent $python) 'pythonw.exe'
-if (Test-Path -LiteralPath $pythonw) { $python = $pythonw }
-
+# Keep the same Python executable as foreground startup so firewall rules match.
 # WMI creates the process outside the terminal/SSH process tree.
 $code = "import runpy,sys; sys.stdout=sys.stderr=open(sys.argv[2],'a',encoding='utf-8',buffering=1); runpy.run_path(sys.argv[1],run_name='__main__')"
 $command = '"{0}" -u -c "{1}" "{2}" "{3}"' -f $python, $code, $appPath, $logPath

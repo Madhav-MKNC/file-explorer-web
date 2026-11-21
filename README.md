@@ -12,21 +12,23 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Open **http://localhost:5000** by default. Stop the server with `Ctrl+C`.
+Open **http://localhost:50006** by default. Stop the server with `Ctrl+C`.
 
 The app creates the `configs` folder and missing configuration files on startup:
 
-- `.host`: the bind address, default `localhost`. Use `localhost` or a loopback IP address such as `127.0.0.1` or `::1`.
-- `.port`: the port number, default `5000`. Use an integer from `1` to `65535`. Existing values are preserved.
+- `.host`: the bind address, default `0.0.0.0` (all IPv4 interfaces). Use `localhost` or a loopback IP address such as `127.0.0.1` or `::1` to keep access local. Existing values are preserved.
+- `.port`: the port number, default `50006`. Use an integer from `1` to `65535`. Existing values are preserved.
 - `.key`: the single access key. If missing, startup prompts for a key in the terminal before running the server. Input is hidden. The key must be a non-empty single line without `/`; leading and trailing whitespace is ignored when creating the key and signing in. No username or separate password is used.
 
-Each file contains one plain value without quotes. Both `python app.py` and `file-explorer-run` initialize and read these files. Non-interactive startup requires an existing valid `.key`; run `python app.py --init-config` interactively to create it without starting the server. Restart the server after changing any config file. Open `http://<host>:<port>` using the configured values; IPv6 addresses need brackets, for example `http://[::1]:5000`.
+- `.trusted-hosts`: additional allowed browser hosts, empty by default. Put one exact public IPv4 address or hostname per line, without `http://`, `https://`, paths, or port numbers. When using port forwarding, add the public IP address used in the browser and restart. Local addresses and the machine hostname are trusted automatically when binding to `0.0.0.0`.
+
+The host, port, and key files each contain one plain value without quotes. Both `python app.py` and `file-explorer-run` initialize and read these files. Non-interactive startup requires an existing valid `.key`; run `python app.py --init-config` interactively to create it without starting the server. Restart the server after changing any config file. Browse to `http://<server-IP>:<port>` or `http://localhost:<port>`, not `0.0.0.0`. IPv6 addresses need brackets, for example `http://[::1]:50006`.
 
 The Windows-style sign-in page accepts only the access key. All explorer pages, app assets, APIs, previews, and downloads require an authenticated browser session. Only the login page and its stylesheet are public. Five failed sign-in attempts within one minute temporarily block further attempts. Use **Sign out** to clear the session. Restarting the app also invalidates all sessions.
 
 Configuration files are ignored by Git. The key is stored as plaintext in `.key`; keep that file private and use a strong, unique key.
 
-The server rejects non-loopback bind addresses and must not be exposed to a network or placed behind a public proxy. Authentication, request tokens, same-origin checks, and trusted-host checks protect file operations from other websites. The Flask debugger is disabled.
+The default bind address exposes the server on all IPv4 interfaces. Authentication, request tokens, same-origin checks, and trusted-host checks stay enabled. Plain HTTP does not encrypt the key or session cookie. Do not use public port forwarding over untrusted networks; use an SSH tunnel or properly configured HTTPS access. The Flask debugger is disabled.
 
 ## Background start and stop
 
@@ -43,15 +45,15 @@ file-explorer-run
 file-explorer-stop
 ```
 
-Start uses Windows WMI to create a hidden process outside the terminal's process tree. It stays running after closing the terminal or disconnecting SSH. Stop targets only the recorded process and checks its creation time to avoid stopping a reused PID. Logs are in `.file-explorer.log`. There is no automatic start after a reboot. Keep the clone in its setup location and use the same Windows account for both commands.
+Start uses Windows WMI to create a hidden process outside the terminal's process tree. It keeps the same `python.exe` used by `python app.py`, so executable-specific firewall rules match. It stays running after closing the terminal or disconnecting SSH. Stop targets only the recorded process and checks its creation time to avoid stopping a reused PID. Logs are in `.file-explorer.log`. There is no automatic start after a reboot. Keep the clone in its setup location and use the same Windows account for both commands.
 
-The app remains localhost-only. From another device, use an SSH tunnel rather than exposing the server:
+For encrypted access from another device, use an SSH tunnel:
 
 ```sh
-ssh -L 5000:localhost:5000 user@windows-host
+ssh -L 50006:localhost:50006 user@windows-host
 ```
 
-Use the configured host and port for the tunnel destination if they differ from the defaults. Open `http://localhost:5000` on that device while the tunnel is connected, then sign in with the access key. Disconnecting the tunnel does not stop the server.
+Use the configured host and port for the tunnel destination if they differ from the defaults. Open `http://localhost:50006` on that device while the tunnel is connected, then sign in with the access key. Disconnecting the tunnel does not stop the server.
 
 ## Access rules
 
